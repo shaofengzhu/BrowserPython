@@ -24,6 +24,12 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="excel.py" />
+    <Compile Include="exceldemo.py" />
+    <Compile Include="excelhelper.py" />
+    <Compile Include="httphelper.py" />
+    <Compile Include="oauthhelper.py" />
+    <Compile Include="runtime.py" />
     <Compile Include="WebServer.py" />
   </ItemGroup>
   <ItemGroup>
