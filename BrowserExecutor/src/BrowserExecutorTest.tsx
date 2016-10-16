@@ -7,7 +7,7 @@ export class BrowserExecutorTest extends React.Component<any, any>{
     private m_executor:BrowserExecutor;
     constructor(props: any){
         super(props);
-        this.m_executor = new BrowserExecutor("ws://localhost:8888/ws");
+        this.m_executor = new BrowserExecutor("ws://localhost:7080/ws");
     }
 
     private onButtonClick(evt){
