@@ -80,21 +80,42 @@ export class BrowserExecutor {
     }
 
     private processExecuteAtClient(msg: Message): void {
-        setTimeout(
-            () => {
-                Utility.log("Sending Executing at client result for " + msg.Id);
-                Utility.log("Message Body is " + TestData.response);
+        var OSF = (window as any).OSF
+        if (OSF && OSF.DDA && OSF.DDA.RichApi && OSF.DDA.RichApi.executeRichApiRequestAsync) {
+            var messageSafearray = OfficeExtension.RichApiMessageUtility.buildRequestMessageSafeArray("", 1, "POST", "ProcessQuery", {}, msg.Body);
+            OSF.DDA.RichApi.executeRichApiRequestAsync(
+                messageSafearray, 
+                (result: any) => {
+                    if (result.status == "succeeded") {                        
+                        var responseBody = OfficeExtension.RichApiMessageUtility.getResponseBody(result);
+                        var respMsg: Message = {
+                            Id: msg.Id,
+                            SubId: msg.SubId,
+                            Type: BrowserExecutor.MessageTypeExecuteAtClientResult,
+                            Body: responseBody
+                        };
 
-                var respMsg: Message = {
-                    Id: msg.Id,
-                    SubId: msg.SubId,
-                    Type: BrowserExecutor.MessageTypeExecuteAtClientResult,
-                    Body: TestData.response
-                };
+                        Utility.log("Sending ExecuteAtClientResult: " + responseBody);
 
-                this.m_socket.send(JSON.stringify(respMsg));
-            },
-            2000);
+                        this.m_socket.send(JSON.stringify(respMsg));
+                    }
+                }
+            );
+        }
+        else{
+            setTimeout(()=>{
+                        var respMsg: Message = {
+                            Id: msg.Id,
+                            SubId: msg.SubId,
+                            Type: BrowserExecutor.MessageTypeExecuteAtClientResult,
+                            Body: TestData.response
+                        };
+
+                        Utility.log("Sending ExecuteAtClientResult using test data: " + TestData.response);
+                        this.m_socket.send(JSON.stringify(respMsg));
+
+            }, 2000);
+        }
     }
 
     private createWebSocket(): void {
