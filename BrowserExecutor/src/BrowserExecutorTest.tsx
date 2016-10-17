@@ -8,6 +8,13 @@ export class BrowserExecutorTest extends React.Component<any, any>{
     constructor(props: any){
         super(props);
         this.m_executor = new BrowserExecutor("ws://localhost:7080/ws");
+
+        window["runDemo"] = () => {
+            this.m_executor.sendRequest("demo")
+            .then((resp: string) => {
+                Utility.log(resp);
+            });
+        };
     }
 
     private onButtonClick(evt){
