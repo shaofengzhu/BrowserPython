@@ -12,13 +12,13 @@ export class BrowserExecutorTest extends React.Component<BrowserExecutorTestProp
     constructor(props: BrowserExecutorTestProps){
         super(props);
         this.m_executor = new BrowserExecutor(props.webSocketUrl);
+    }
 
-        window["runDemo"] = () => {
-            this.m_executor.sendRequest("demo")
-            .then((resp: string) => {
-                Utility.log(resp);
-            });
-        };
+    public sendRequest(name: string){
+        this.m_executor.sendRequest(name)
+        .then((resp: string) => {
+            Utility.log(resp);
+        });
     }
 
     private onButtonClick(evt){
