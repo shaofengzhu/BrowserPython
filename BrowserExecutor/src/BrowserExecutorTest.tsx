@@ -3,11 +3,15 @@ import * as ReactDOM from 'react-dom';
 import {BrowserExecutor} from './BrowserExecutor'
 import {Utility} from './Utility'
 
-export class BrowserExecutorTest extends React.Component<any, any>{
+export interface BrowserExecutorTestProps{
+    webSocketUrl: string
+}
+
+export class BrowserExecutorTest extends React.Component<BrowserExecutorTestProps, any>{
     private m_executor:BrowserExecutor;
-    constructor(props: any){
+    constructor(props: BrowserExecutorTestProps){
         super(props);
-        this.m_executor = new BrowserExecutor("ws://localhost:7080/ws");
+        this.m_executor = new BrowserExecutor(props.webSocketUrl);
 
         window["runDemo"] = () => {
             this.m_executor.sendRequest("demo")
