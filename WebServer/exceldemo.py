@@ -137,11 +137,11 @@ if __name__ == "__main__":
     print("Created session");
     runtime.ClientRequestContext.defaultRequestUrlAndHeaders = requestUrlAndHeaders
     context = excel.RequestContext()
-    ExcelDemo.populateDataSmall(context)
-    #ExcelDemo.populateData(context)
-    #print("Populated data");
-    #ExcelDemo.analyzeData(context)
-    #print("Analyzed data")
+    #ExcelDemo.populateDataSmall(context)
+    ExcelDemo.populateData(context)
+    print("Populated data");
+    ExcelDemo.analyzeData(context)
+    print("Analyzed data")
     excelhelper.ExcelHelper.closeSession(requestUrlAndHeaders)
     print("Closed session")
     runtime.ClientRequestContext.defaultRequestUrlAndHeaders = None
