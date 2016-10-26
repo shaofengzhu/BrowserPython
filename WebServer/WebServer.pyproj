@@ -25,12 +25,28 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="excel.py" />
-    <Compile Include="exceldemo.py" />
+    <Compile Include="excelandworddemo.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="exceldemodesktop.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="exceldemograph.py" />
+    <Compile Include="exceldemolib.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="excelhelper.py" />
     <Compile Include="httphelper.py" />
     <Compile Include="oauthhelper.py" />
     <Compile Include="runtime.py" />
     <Compile Include="WebServer.py" />
+    <Compile Include="word.py" />
+    <Compile Include="worddemodesktop.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="worddemolib.py">
+      <SubType>Code</SubType>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <InterpreterReference Include="{2af0f10d-7135-4994-9156-5d01c9c11b7e}\3.5" />
