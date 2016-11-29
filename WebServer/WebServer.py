@@ -146,6 +146,7 @@ class EchoSocketHandler(tornado.websocket.WebSocketHandler):
         context.customRequestExecutor = WebSocketRequestExecutor(msg.Id, wsHandler)
         # context.executionMode = runtime.RequestExecutionMode.instantSync
         exec(msg.Body)
+        context.sync()
         EchoSocketHandler.sendExecuteAtServerResultForRequestMessage(msg, wsHandler)
 
     @staticmethod
