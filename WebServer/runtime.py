@@ -1,8 +1,11 @@
-import sys
+﻿import sys
 import json
 import enum
+import datetime
 import logging
 import httphelper
+import namedpipeclient
+
 class Constants:
     getItemAt = "GetItemAt"
     id = "Id"
@@ -46,6 +49,7 @@ class ObjectPathType(enum.IntEnum):
     Property = 4
     Indexer = 5
     ReferenceId = 6
+    NullObject = 7
 
 class ClientRequestFlags(enum.IntEnum):
     NoneValue = 0
@@ -121,28 +125,98 @@ class HttpRequestExecutor(IRequestExecutor):
     def execute(self, requestInfo: httphelper.RequestInfo) -> httphelper.ResponseInfo:
         return httphelper.HttpUtility.invoke(requestInfo)
 
+class PipeExecutor(IRequestExecutor):
+    def execute(self, request: httphelper.RequestInfo) -> httphelper.ResponseInfo:
+        if request.method is None:
+            request.method = "GET"
+        request.method = request.method.upper()
+        if request.method == "GET" or request.method == "DELETE":
+            requestInfo.body = None
+
+        index = request.url.find('/_api')
+        if index < 0:
+            raise Exception("Invalid url")
+        indexPipeNameStart = request.url.rfind('/', 0, index)
+        if indexPipeNameStart < 0:
+            raise Exception("Cannot find pipename")
+        pipeName = request.url[indexPipeNameStart + 1: index]
+        index = index + len('/_api')
+        pathAndQuery = request.url[index:];
+
+        requestMessage = request.method + " " + pathAndQuery + " HTTP/1.1\n"
+        requestMessage = requestMessage + "\n"
+        if not Utility.isNullOrEmptyString(request.body):
+            requestMessage = requestMessage + request.body
+
+        requestBytes = requestMessage.encode('utf-8')
+        pipeClient = namedpipeclient.WinNamedPipeClient(pipeName)
+        pipeClient.write(requestBytes)
+        responseBytes = pipeClient.read()
+        pipeClient.close()
+        responseMessage = responseBytes.decode('utf-8')
+
+        ret = httphelper.ResponseInfo()
+        headerLines = []
+        lastNewLineIndex = -1
+        index = responseMessage.find('\n', 0)
+        while index > 0:
+            if lastNewLineIndex > 0 and lastNewLineIndex + 1 == index:
+                # Two consecutive newline
+                break
+            headerLines.append(responseMessage[lastNewLineIndex + 1 : index])
+            lastNewLineIndex = index
+            index = responseMessage.find('\n', index + 1)
+        if index > 0:
+            ret.body = responseMessage[index + 1: ]
+
+        if len(headerLines) == 0:
+            raise Utility.createRuntimeError(ErrorCodes.invalidArgument)
+        statusLineParts = headerLines[0].split()
+        if len(statusLineParts) < 2:
+            raise Utility.createRuntimeError(ErrorCodes.invalidArgument)
+        ret.statusCode = int(statusLineParts[0])
+        return ret
+
+class ClientResultProcessingType(enum.IntEnum):
+    none = 0
+    date = 1
+
 class ClientResult(IResultHandler):
-    def __init__(self):
+    def __init__(self, processingType: ClientResultProcessingType = ClientResultProcessingType.none):
         self._value = None
+        self._isLoaded = False
+        self._processingType = processingType
 
     @property
     def value(self):
+        if not self._isLoaded:
+            raise Utility.createRuntimeError(ErrorCodes.propertyNotLoaded)
         return self._value
 
     def _handleResult(self, value: any) -> None:
-        self._value = value
+        self._isLoaded = True
+        if isinstance(value, dict) and value.get("_IsNull"):
+            return
+        if self._processingType == ClientResultProcessingType.date:
+            self._value = Utility.adjustToDateTime(value)
+        else:
+            self._value = value
+
 
 class RequestUrlAndHeaderInfo:
     def __init__(self):
         self.url = None
         self.headers = {}
 
+class RequestExecutionMode(enum.IntEnum):
+    batch = 0
+    instantSync = 1
 
 class ClientRequestContext:
     customRequestExecutor = None
     defaultRequestUrlAndHeaders = None
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, executionMode: RequestExecutionMode):
         self.__nextId = 1
         self._requestHeaders = {}
         self._url = url
@@ -157,12 +231,20 @@ class ClientRequestContext:
         if Utility.isNullOrEmptyString(self._url):
             self._url = Constants.localDocument
 
+        self._executionMode = executionMode
+        if self._executionMode is None:
+            self._executionMode = RequestExecutionMode.batch
+
         self._processingResult = False
         self._customData = Constants.iterativeExecutor
         if (ClientRequestContext.customRequestExecutor is not None):
             self._requestExecutor = ClientRequestContext.customRequestExecutor
         else:
-            self._requestExecutor = HttpRequestExecutor()
+            if self._url.startswith("pipe://"):
+                self._requestExecutor = PipeExecutor()
+            else:
+                self._requestExecutor = HttpRequestExecutor()
+
         self._rootObject = None
         self.__pendingRequest = None
 
@@ -170,10 +252,18 @@ class ClientRequestContext:
     def requestHeaders(self):
         return self._requestHeaders
 
-    def _nextId(self):
+    def _nextId(self) -> int:
         ret = self.__nextId
         self.__nextId = self.__nextId + 1
         return ret
+
+    @property
+    def executionMode(self) -> RequestExecutionMode:
+        return self._executionMode
+
+    @executionMode.setter
+    def executionMode(self, value : RequestExecutionMode):
+        self._executionMode = value
 
     @property
     def _pendingRequest(self) -> 'ClientRequest':
@@ -196,31 +286,33 @@ class ClientRequestContext:
             elif isinstance(loadOption.select, list):
                 queryOption.Select = loadOption.select
             elif not Utility.isNullOrUndefined(loadOption.select):
-                Utility.throwError(ResourceStrings.invalidArgument, "option.select")
+                raise Utility.createInvalidArgumentException("option.select")
 
             if isinstance(loadOption.expand, str):
                 queryOption.Expand = self._parseSelectExpand(loadOption.expand)
             elif isinstance(loadOption.expand, list):
                 queryOption.Expand = loadOption.expand
             elif not Utility.isNullOrUndefined(loadOption.expand):
-                Utility.throwError(ResourceStrings.invalidArgument, "option.expand")
+                raise Utility.createInvalidArgumentException("option.expand")
 
             if isinstance(loadOption.top, int):
                 queryOption.Top = loadOption.top
             elif not Utility.isNullOrUndefined(loadOption.top):
-                Utility.throwError(ResourceStrings.invalidArgument, "option.top")
+                raise Utility.createInvalidArgumentException("option.top")
 
             if isinstance(loadOption.skip, int):
                 queryOption.Skip = loadOption.skip
             elif not Utility.isNullOrUndefined(loadOption.skip):
-                Utility.throwError(ResourceStrings.invalidArgument, "option.skip")
+                raise Utility.createInvalidArgumentException("option.skip")
         elif not Utility.isNullOrUndefined(option):
-            Utility.throwError(ResourceStrings.invalidArgument, "option")
+            raise Utility.createInvalidArgumentException("option")
 
         action = ActionFactory.createQueryAction(self, clientObject, queryOption)
         self._pendingRequest.addActionResultHandler(action, clientObject)
+        if self._executionMode == RequestExecutionMode.instantSync :
+            self.sync()
 
-    def trace(self, message: str):
+    def trace(self, message: str) -> None:
         ActionFactory.createTraceAction(self, message)
 
     def _parseSelectExpand(self, select: str) -> list:
@@ -348,6 +440,16 @@ class ObjectPath:
                 self._argumentObjectPaths = None
                 return
 
+    def _updateAsNullObject(self) -> None:
+        self._isInvalidAfterRequest = False;
+        self._isValid = True;
+        self._objectPathInfo.ObjectPathType = ObjectPathType.NullObject;
+        self._objectPathInfo.Name = "";
+        self._objectPathInfo.ArgumentInfo = {};
+        self._parentObjectPath = None;
+        self._argumentObjectPaths = None;
+        return
+
 class ClientRequest:
     def __init__(self, context):
         self._context = context
@@ -388,7 +490,7 @@ class ClientRequest:
             return
 
         if not objectPath.isValid:
-            Utility.throwError(ResourceStrings.invalidObjectPath, Utility.getObjectPathExpression(objectPath))
+            raise Utility.createRuntimeError(ErrorCodes.invalidObjectPath, Utility._getResourceString(ResourceStrings.invalidObjectPath, Utility.getObjectPathExpression(objectPath)))
 
         while objectPath:
             if objectPath.isWriteOperation:
@@ -443,6 +545,9 @@ class ClientObject(IResultHandler):
         Utility.checkArgumentNull(context, "context")
         self._context = context
         self.__objectPath = objectPath
+        self.__isLoaded = False
+        # set __isNull to be undefined as we do not know the value yet
+        self.__isNull = None
         if self.__objectPath:
             if not context._processingResult:
                 ActionFactory.createInstantiateAction(context, self)
@@ -452,6 +557,14 @@ class ClientObject(IResultHandler):
         return self._context
 
     @property
+    def isNullObject(self) -> bool:
+        if self.__isNull is None and self.context.executionMode == RequestExecutionMode.instantSync:
+            self.context.load(self)
+        if self.__isNull is None:
+            raise Utility.createRuntimeError(ErrorCodes.propertyNotLoaded)
+        return self.__isNull
+
+    @property
     def _objectPath(self) -> ObjectPath:
         return self.__objectPath
 
@@ -459,8 +572,31 @@ class ClientObject(IResultHandler):
     def _objectPath(self, value: ObjectPath):
         self.__objectPath = value
 
+    @property
+    def _isLoaded(self) -> bool:
+        return self.__isLoaded
+
+    @property
+    def _isNull(self):
+        return self.__isNull
+
+    def _setAsNullObject(self):
+        if self.__objectPath:
+            self.__objectPath._updateAsNullObject()
+
     def _handleResult(self, value):
-        pass
+        self.__isNull = Utility.isNullOrUndefined(value)
+        if self.__isNull and self.__objectPath:
+            self.__objectPath._updateAsNullObject()
+        self.__isLoaded = True
+        Utility.fixObjectPathIfNecessary(self, value)
+
+    def _handleIdResult(self, value):
+        self.__isNull = Utility.isNullOrUndefined(value)
+        if self.__isNull and self.__objectPath:
+            self.__objectPath._updateAsNullObject()
+        Utility.fixObjectPathIfNecessary(self, value)
+
 
 class ActionFactory:
     @staticmethod
@@ -663,12 +799,7 @@ class InstantiateActionResultHandler(IResultHandler):
         self._clientObject = clientObject
 
     def _handleResult(self, value):
-        Utility.fixObjectPathIfNecessary(self._clientObject, value)
-        if value and \
-            not Utility.isNullOrUndefined(value.get(Constants.referenceId)) and \
-            hasattr(self._clientObject.__class__, "_initReferenceId") and \
-            callable(self._clientObject.__class__, "_initReferenceId"):
-            self._clientObject._initReferenceId(value.get(Constants.referenceId))
+        self._clientObject._handleIdResult(value)
 
 class ResourceStrings:
     invalidObjectPath = "InvalidObjectPath"
@@ -677,11 +808,25 @@ class ResourceStrings:
     invalidArgument = "InvalidArgument"
     runMustReturnPromise = "RunMustReturnPromise"
 
+class ErrorCodes:
+    invalidObjectPath = "InvalidObjectPath"
+    propertyNotLoaded = "PropertyNotLoaded"
+    invalidRequestContext = "InvalidRequestContext"
+    invalidArgument = "InvalidArgument"
+
+class RuntimeException(Exception):
+    def __init__(self, code: str, message: str, location = None):
+        self.code = code
+        self.message = message
+        self.location = location
+    def __str__(self):
+        return repr(self.code) + ":" + repr(self.message)
+
 class Utility:
     @staticmethod
     def checkArgumentNull(value, name: str):
         if (Utility.isNullOrUndefined(value)):
-            Utility.throwError(ResourceStrings.invalidArgument, name)
+            raise Utility.createInvalidArgumentException(name)
 
     @staticmethod
     def isUndefined(value) -> bool:
@@ -785,7 +930,7 @@ class Utility:
         while (objectPath):
             if (not objectPath.isValid):
                 pathExpression = Utility.getObjectPathExpression(objectPath)
-                Utility.throwError(ResourceStrings.invalidObjectPath, pathExpression)
+                raise Utility.createRuntimeError(ErrorCodes.invalidObjectPath, Utility._getResourceString(ResourceStrings.invalidObjectPath, pathExpression))
             objectPath = objectPath.parentObjectPath
 
     @staticmethod
@@ -796,13 +941,13 @@ class Utility:
                 while objectPath:
                     if (not objectPath.isValid):
                         pathExpression = Utility.getObjectPathExpression(objectPath)
-                        Utility.throwError(ResourceStrings.invalidObjectPath, pathExpression)
+                        raise Utility.createRuntimeError(ErrorCodes.invalidObjectPath, Utility._getResourceString(ResourceStrings.invalidObjectPath, pathExpression))
                     objectPath = objectPath.parentObjectPath
 
     @staticmethod
     def validateContext(context: ClientRequestContext, clientObject: ClientObject):
         if (clientObject and clientObject.context != context):
-            Utility.throwError(ResourceStrings.invalidRequestContext)
+            raise Utility.createRuntimeError(ErrorCodes.invalidRequestContext, Utility._getResourceString(ResourceStrings.invalidRequestContext))
 
 
     _logEnabled = False
@@ -819,14 +964,13 @@ class Utility:
     _underscoreCharCode = ord('_')
 
     @staticmethod
-    def throwError(resourceId: str, arg: str):
-        raise
-        #throw new _Internal.RuntimeError(resourceId, Utility._getResourceString(resourceId, arg), new Array<string>(), {})
+    def createRuntimeError(code: str, message: str = None, location: str = None) -> Exception:
+        return RuntimeError(code, message, location)
     
     @staticmethod
-    def createRuntimeError(code: str, message: str = None, location: str = None) -> Exception:
-        return RuntimeError(code, message, [], { errorLocation: location })
-    
+    def createInvalidArgumentException(name: str) -> Exception:
+        return RuntimeError(ErrorCodes.invalidArgument, Utility._getResourceString(ResourceStrings.invalidArgument, name));
+
     @staticmethod
     def _getResourceString(resourceId: str, arg: str = None) -> str:
         ret = resourceId
@@ -846,9 +990,21 @@ class Utility:
         return ret
     
     @staticmethod
-    def throwIfNotLoaded(propertyName: str, fieldValue):
-        if (fieldValue is None and propertyName[0] != "_"):
-            Utility.throwError(ResourceStrings.propertyNotLoaded, propertyName)
+    def throwIfNotLoaded(propertyName: str, fieldValue, entityName: str, isNull: bool):
+        # isNull could be None, True or False. When we do not know whether the object
+        # is null or not, isNull is None
+        if (not isNull and fieldValue is None and propertyName[0] != "_"):
+            raise Utility.createRuntimeError(ErrorCodes.propertyNotLoaded, Utility._getResourceString(ResourceStrings.propertyNotLoaded, propertyName))
+
+    @staticmethod
+    def loadIfInstantSyncExecutionMode(clientObject: ClientObject, propertyName: str, fieldValue) -> None:
+        if clientObject.context.executionMode == RequestExecutionMode.instantSync and clientObject._isLoaded == False:
+            clientObject.load();
+
+    @staticmethod
+    def syncIfInstantSyncExecutionMode(clientObject: ClientObject) -> None:
+        if clientObject.context.executionMode == RequestExecutionMode.instantSync:
+            clientObject.context.sync()
 
     @staticmethod
     def getObjectPathExpression(objectPath: ObjectPath) -> str:
@@ -888,3 +1044,13 @@ class Utility:
     @staticmethod
     def normalizeName(name: str) -> str:
         return name[0:1].lower() + name[1:]
+
+    @staticmethod
+    def adjustToDateTime(value):
+        if isinstance(value, str):
+            return datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ")
+        elif isinstance(value, list):
+            return map(Utility.adjustToDateTime, value)
+        return value
+
+

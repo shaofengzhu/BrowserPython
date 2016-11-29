@@ -1,15 +1,9 @@
-import numbers
-import runtime
+﻿import runtime
 import word
-import datetime
-import json
 import worddemolib
 
 if __name__ == "__main__":
-    requestUrlAndHeaders = runtime.RequestUrlAndHeaderInfo();
-    requestUrlAndHeaders.url = "http://localhost:8054";
-    runtime.ClientRequestContext.defaultRequestUrlAndHeaders = requestUrlAndHeaders
+    worddemolib.WordDemoLib.initDesktopContext()
     context = word.RequestContext()
-    print("Insert image");
-    worddemolib.WordDemoLib.insertSamplePictureAtEnd(context)
+    worddemolib.WordDemoLib.helloWorld(context)
     runtime.ClientRequestContext.defaultRequestUrlAndHeaders = None

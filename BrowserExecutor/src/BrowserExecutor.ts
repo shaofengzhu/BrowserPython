@@ -22,6 +22,7 @@ export class BrowserExecutor {
     private m_socket: WebSocket;
     private m_url: string;
     private static MessageTypeExecuteAtServer = "ExecuteAtServer";
+    private static MessageTypeExecuteAtServer_Code = "ExecuteAtServer_Code"
     private static MessageTypeExecuteAtServerResult = "ExecuteAtServerResult";
     private static MessageTypeExecuteAtClient = "ExecuteAtClient";
     private static MessageTypeExecuteAtClientResult = "ExecuteAtClientResult";
@@ -36,7 +37,7 @@ export class BrowserExecutor {
         return ret;
     }
 
-    public sendRequest(message: string): OfficeExtension.IPromise<string>{        
+    public sendRequest(message: string): OfficeExtension.IPromise<string>{
         return new OfficeExtension.Promise((resolve, reject) =>{
             var requestInfo: RequestInfo = {
                     id: BrowserExecutor.getNextMessageId(),
@@ -50,6 +51,26 @@ export class BrowserExecutor {
                 SubId: 0,
                 Type: BrowserExecutor.MessageTypeExecuteAtServer,
                 Body: message
+            };
+
+            this.m_socket.send(JSON.stringify(msg));
+        });
+    }
+
+    public executeCode(code: string): OfficeExtension.IPromise<string>{
+        return new OfficeExtension.Promise((resolve, reject) =>{
+            var requestInfo: RequestInfo = {
+                    id: BrowserExecutor.getNextMessageId(),
+                    promiseResolveFunc: resolve,
+                    promiseRejectFunc: reject
+                };
+
+            this.m_requestMap[requestInfo.id] = requestInfo;
+            var msg : Message = {
+                Id: requestInfo.id,
+                SubId: 0,
+                Type: BrowserExecutor.MessageTypeExecuteAtServer_Code,
+                Body: code
             };
 
             this.m_socket.send(JSON.stringify(msg));

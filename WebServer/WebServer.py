@@ -1,4 +1,4 @@
-import tornado.ioloop
+﻿import tornado.ioloop
 import tornado.web
 import tornado.httpclient
 import tornado.websocket
@@ -8,7 +8,7 @@ import json
 import threading
 import runtime
 import excel
-import exceldemo
+import exceldemolib
 import httphelper
 import time
 
@@ -20,6 +20,7 @@ class MainHandler(tornado.web.RequestHandler):
 
 class Constants:
     MessageTypeExecuteAtServer = "ExecuteAtServer"
+    MessageTypeExecuteAtServer_Code = "ExecuteAtServer_Code"
     MessageTypeExecuteAtServerResult = "ExecuteAtServerResult"
     MessageTypeExecuteAtClient = "ExecuteAtClient"
     MessageTypeExecuteAtClientResult = "ExecuteAtClientResult"
@@ -81,6 +82,8 @@ class EchoSocketHandler(tornado.websocket.WebSocketHandler):
         msg = EchoSocketHandler.parseMessage(message)
         if (msg.Type == Constants.MessageTypeExecuteAtServer):
             self.processExecuteAtServerMessage(msg)
+        elif (msg.Type == Constants.MessageTypeExecuteAtServer_Code):
+            self.processExecuteCodeAtServerMessage(msg)
         elif (msg.Type == Constants.MessageTypeExecuteAtClientResult):
             self.processExecuteAtClientResultMessage(msg)
         else:
@@ -91,6 +94,9 @@ class EchoSocketHandler(tornado.websocket.WebSocketHandler):
             threading.Thread(target = EchoSocketHandler.executePopulateDataSimple, args = (msg, self)).start()
         elif (msg.Body == "demo"):
             threading.Thread(target = EchoSocketHandler.executePopulateDataAndAnalyze, args = (msg, self)).start()
+
+    def processExecuteCodeAtServerMessage(self, msg: MessageInfo):
+        threading.Thread(target = EchoSocketHandler.executeCode, args = (msg, self)).start()
 
     def processExecuteAtClientResultMessage(self, msg: MessageInfo):
         with self._queueLock:
@@ -122,15 +128,24 @@ class EchoSocketHandler(tornado.websocket.WebSocketHandler):
     def executePopulateDataSimple(msg: MessageInfo, wsHandler: tornado.websocket.WebSocketHandler):
         context = excel.RequestContext()
         context.customRequestExecutor = WebSocketRequestExecutor(msg.Id, wsHandler)
-        exceldemo.ExcelDemo.populateDataSmall(context)
+        exceldemolib.ExcelDemoLib.populateDataSmall(context)
         EchoSocketHandler.sendExecuteAtServerResultForRequestMessage(msg, wsHandler)
 
     @staticmethod
     def executePopulateDataAndAnalyze(msg: MessageInfo, wsHandler: tornado.websocket.WebSocketHandler):
         context = excel.RequestContext()
         context.customRequestExecutor = WebSocketRequestExecutor(msg.Id, wsHandler)
-        exceldemo.ExcelDemo.populateData(context)
-        exceldemo.ExcelDemo.analyzeData(context)
+        exceldemolib.ExcelDemoLib.clearWorkbook(context)
+        exceldemolib.ExcelDemoLib.populateData(context)
+        exceldemolib.ExcelDemoLib.analyzeData(context)
+        EchoSocketHandler.sendExecuteAtServerResultForRequestMessage(msg, wsHandler)
+
+    @staticmethod
+    def executeCode(msg: MessageInfo, wsHandler: tornado.websocket.WebSocketHandler):
+        context = excel.RequestContext()
+        context.customRequestExecutor = WebSocketRequestExecutor(msg.Id, wsHandler)
+        # context.executionMode = runtime.RequestExecutionMode.instantSync
+        exec(msg.Body)
         EchoSocketHandler.sendExecuteAtServerResultForRequestMessage(msg, wsHandler)
 
     @staticmethod

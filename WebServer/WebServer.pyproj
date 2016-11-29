@@ -36,9 +36,15 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="excelhelper.py" />
+    <Compile Include="excelperftest.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="httphelper.py" />
     <Compile Include="oauthhelper.py" />
     <Compile Include="runtime.py" />
+    <Compile Include="testexec.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="WebServer.py" />
     <Compile Include="word.py" />
     <Compile Include="worddemodesktop.py">
@@ -63,6 +69,9 @@
       <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
       <Architecture>X86</Architecture>
     </Interpreter>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="DemoScript.py" />
   </ItemGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>

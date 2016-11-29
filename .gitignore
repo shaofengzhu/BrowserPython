@@ -244,3 +244,5 @@ ModelManifest.xml
 WebServer/env/
 BrowserExecutor/dist/
 __pycache__/
+WebServer/demo.docx
+WebServer/demo.xlsx
