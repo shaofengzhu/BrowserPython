@@ -8606,7 +8606,7 @@ class RequestContext(OfficeExtension.ClientRequestContext):
         return self._workbook
 
 def createInstantContext():
-    ret = RequestContext("pipe://./excel", OfficeExtension.RequestExecutionMode.instantSync)
+    ret = RequestContext("pipe://./excel/_api", OfficeExtension.RequestExecutionMode.instantSync)
     return ret
 
 # End_PlaceHolder_GlobalFooter
