@@ -4,6 +4,7 @@
         "module": "amd",
         "jsx": "react",
         "outDir": "./dist/",
-        "declaration": true
+        "declaration": true,
+        "moduleResolution": "node"
     }
 }

@@ -165,9 +165,11 @@ def make_app():
     settings = {
         "static_path": staticPath
         }
+    miniMapsStaticPath = os.path.join(staticPath, "mini-maps")
     return tornado.web.Application([
             (r"/", MainHandler),
             (r"/ws", EchoSocketHandler),
+            (r"/mini-maps/(.*)", tornado.web.StaticFileHandler, {"path": miniMapsStaticPath}),
         ], **settings);
 
 
