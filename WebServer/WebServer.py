@@ -55,12 +55,13 @@ class WebSocketRequestExecutor(runtime.IRequestExecutor):
 
         ret = httphelper.ResponseInfo()
         while True:
+            self._wsHandler._queueHasEntryEvent.wait(1)
+            self._wsHandler._queueHasEntryEvent.clear()
             msgFromClient = self._wsHandler.getAndRemoveExecuteAtClientResult(msgToClient.Id, msgToClient.SubId)
             if (msgFromClient is not None):
                 ret.statusCode = 200
                 ret.body = msgFromClient.Body
                 break
-            time.sleep(1)
         return ret
 
 class EchoSocketHandler(tornado.websocket.WebSocketHandler):
@@ -71,6 +72,7 @@ class EchoSocketHandler(tornado.websocket.WebSocketHandler):
         super().__init__(application, request, **kwargs)
         self._queue = []
         self._queueLock = threading.Lock()
+        self._queueHasEntryEvent = threading.Event()
 
     def open(self, *args, **kwargs):
         print('socket open')
@@ -101,6 +103,7 @@ class EchoSocketHandler(tornado.websocket.WebSocketHandler):
     def processExecuteAtClientResultMessage(self, msg: MessageInfo):
         with self._queueLock:
             self._queue.append(msg)
+        self._queueHasEntryEvent.set()
 
     def getAndRemoveExecuteAtClientResult(self, msgId, msgSubId):
         ret = None
